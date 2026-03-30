@@ -182,6 +182,12 @@
   backdrop-filter: blur(18px);
 }
 
+.swap-card-centered {
+  width: 100%;
+  max-width: 560px;
+  margin: 0 auto;
+}
+
 .terminal-header {
   display: flex;
   align-items: center;
@@ -326,17 +332,6 @@
   font-size: 1rem;
   cursor: pointer;
   box-shadow: 0 10px 26px rgba(48, 255, 105, 0.2);
-}
-
-/* NEW: make only the Swap section centered and narrower */
-.swap-card-centered {
-  width: 100%;
-  max-width: 560px;
-  margin: 0 auto;
-}
-
-.swap-card-centered .trade-card {
-  padding: 22px;
 }
 
 .limit-shell {
@@ -598,6 +593,13 @@
   margin-top: 0;
 }
 
+.bottom-grid {
+  margin-top: 26px;
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 22px;
+}
+
 .eusd-layout {
   display: grid;
   grid-template-columns: minmax(0, 1.05fr) minmax(300px, 0.95fr);
@@ -671,10 +673,51 @@
   color: #8dffad;
 }
 
+.swap-action-stack {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.secondary-action {
+  width: 100%;
+  border: 1px solid rgba(95, 255, 140, 0.18);
+  border-radius: 18px;
+  padding: 15px 18px;
+  background: rgba(12, 21, 12, 0.95);
+  color: #dfffe0;
+  font-weight: 700;
+  font-size: 0.96rem;
+  cursor: pointer;
+}
+
+.secondary-action:disabled,
+.primary-action:disabled,
+.table-action-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.swap-helper-text {
+  margin: 14px 0 0;
+  color: #a7c5a7;
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+.swap-helper-text.success {
+  color: #89ffaa;
+}
+
+.swap-helper-text.error {
+  color: #ff9e9e;
+}
+
 @media (max-width: 1100px) {
   .limit-layout,
   .eusd-layout,
-  .limit-config-grid {
+  .limit-config-grid,
+  .bottom-grid {
     grid-template-columns: 1fr;
   }
 
