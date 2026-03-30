@@ -1,5 +1,16 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import "./App.css";
+import {
+  fetchSwapState,
+  requestSwapWallet,
+  approveSwapOperator,
+  swapTokenAForB,
+  swapTokenBForA,
+  estimateSwapOutputRaw,
+  parseUnitsSafe,
+  formatUnitsSafe,
+  getReadProvider,
+} from "./lib/swap";
 
 const tabs = ["Swap", "Limit", "Lend", "eUSD"];
 
@@ -36,8 +47,13 @@ const ebondListings = [
 function App() {
   const [activeTab, setActiveTab] = useState("Swap");
 
-  const [swapFromToken, setSwapFromToken] = useState("FRAP");
-  const [swapToToken, setSwapToToken] = useState("USDC");
+  const [wallet, setWallet] = useState(null);
+  const [swapState, setSwapState] = useState(null);
+  const [swapLoading, setSwapLoading] = useState(false);
+  const [swapSubmitting, setSwapSubmitting] = useState(false);
+  const [swapMessage, setSwapMessage] = useState("");
+  const [swapError, setSwapError] = useState("");
+  const [swapDirection, setSwapDirection] = useState("A_TO_B");
   const [swapFromAmount, setSwapFromAmount] = useState("");
   const [swapToAmount, setSwapToAmount] = useState("");
 
@@ -59,7 +75,7 @@ function App() {
         return {
           title: "Encrypted Token Swap",
           description:
-            "Swap Frappucino, bond assets, and stablecoins with a privacy-first terminal inspired by elite onchain trading interfaces.",
+            "Swap confidential assets through the CoffheeSwap contract with a focused terminal-style interface and operator approval flow.",
         };
       case "Limit":
         return {
@@ -87,14 +103,188 @@ function App() {
     }
   }, [activeTab]);
 
+  const currentSwapPair = useMemo(() => {
+    if (!swapState) {
+      return {
+        from: { symbol: "Token A", address: "", approved: false, decimals: 18 },
+        to: { symbol: "Token B", address: "", approved: false, decimals: 18 },
+        rateNumerator: 0,
+        rateDenominator: 1,
+        rateLabel: "—",
+      };
+    }
+
+    if (swapDirection === "A_TO_B") {
+      return {
+        from: swapState.tokenA,
+        to: swapState.tokenB,
+        rateNumerator: swapState.rates.aToB.numerator,
+        rateDenominator: swapState.rates.aToB.denominator,
+        rateLabel: `${swapState.rates.aToB.numerator.toString()} / ${swapState.rates.aToB.denominator.toString()}`,
+      };
+    }
+
+    return {
+      from: swapState.tokenB,
+      to: swapState.tokenA,
+      rateNumerator: swapState.rates.bToA.numerator,
+      rateDenominator: swapState.rates.bToA.denominator,
+      rateLabel: `${swapState.rates.bToA.numerator.toString()} / ${swapState.rates.bToA.denominator.toString()}`,
+    };
+  }, [swapDirection, swapState]);
+
+  useEffect(() => {
+    if (activeTab !== "Swap") return;
+
+    let cancelled = false;
+
+    async function loadSwapData() {
+      try {
+        setSwapLoading(true);
+        setSwapError("");
+        setSwapMessage("");
+
+        const provider = wallet?.provider || (await getReadProvider());
+        const nextState = await fetchSwapState(provider, wallet?.address);
+        if (!cancelled) {
+          setSwapState(nextState);
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setSwapError(err.message || "Failed to load swap state.");
+        }
+      } finally {
+        if (!cancelled) {
+          setSwapLoading(false);
+        }
+      }
+    }
+
+    loadSwapData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeTab, wallet]);
+
+  useEffect(() => {
+    if (!swapState || !swapFromAmount || Number(swapFromAmount) <= 0) {
+      setSwapToAmount("");
+      return;
+    }
+
+    try {
+      const amountRaw = parseUnitsSafe(swapFromAmount, currentSwapPair.from.decimals);
+      const outRaw = estimateSwapOutputRaw(
+        amountRaw,
+        currentSwapPair.rateNumerator,
+        currentSwapPair.rateDenominator
+      );
+      setSwapToAmount(formatUnitsSafe(outRaw, currentSwapPair.to.decimals, 6));
+    } catch {
+      setSwapToAmount("");
+    }
+  }, [swapFromAmount, swapState, currentSwapPair]);
+
+  const handleConnectWallet = async () => {
+    try {
+      setSwapError("");
+      const connected = await requestSwapWallet();
+      setWallet(connected);
+      setSwapMessage(
+        `Connected ${connected.address.slice(0, 6)}...${connected.address.slice(-4)}`
+      );
+    } catch (err) {
+      setSwapError(err.message || "Wallet connection failed.");
+    }
+  };
+
   const handleSwapFlip = () => {
-    setSwapFromToken(swapToToken);
-    setSwapToToken(swapFromToken);
-    setSwapFromAmount(swapToAmount);
-    setSwapToAmount(swapFromAmount);
+    setSwapDirection((prev) => (prev === "A_TO_B" ? "B_TO_A" : "A_TO_B"));
+    setSwapFromAmount("");
+    setSwapToAmount("");
+    setSwapMessage("");
+    setSwapError("");
+  };
+
+  const handleApproveSwap = async () => {
+    try {
+      setSwapError("");
+      setSwapMessage("");
+
+      const connected = wallet || (await requestSwapWallet());
+      if (!wallet) {
+        setWallet(connected);
+      }
+
+      if (!swapState) {
+        throw new Error("Swap state not loaded yet.");
+      }
+
+      setSwapSubmitting(true);
+
+      await approveSwapOperator({
+        signer: connected.signer,
+        tokenAddress: currentSwapPair.from.address,
+      });
+
+      const refreshed = await fetchSwapState(connected.provider, connected.address);
+      setSwapState(refreshed);
+      setSwapMessage(`Operator approved for ${currentSwapPair.from.symbol}.`);
+    } catch (err) {
+      setSwapError(err.message || "Approval failed.");
+    } finally {
+      setSwapSubmitting(false);
+    }
+  };
+
+  const handleExecuteSwap = async () => {
+    try {
+      setSwapError("");
+      setSwapMessage("");
+
+      if (!swapFromAmount || Number(swapFromAmount) <= 0) {
+        throw new Error("Enter an amount to swap.");
+      }
+
+      const connected = wallet || (await requestSwapWallet());
+      if (!wallet) {
+        setWallet(connected);
+      }
+
+      const amountRaw = parseUnitsSafe(swapFromAmount, currentSwapPair.from.decimals);
+
+      setSwapSubmitting(true);
+
+      if (swapDirection === "A_TO_B") {
+        await swapTokenAForB({
+          signer: connected.signer,
+          amountRaw,
+        });
+      } else {
+        await swapTokenBForA({
+          signer: connected.signer,
+          amountRaw,
+        });
+      }
+
+      const refreshed = await fetchSwapState(connected.provider, connected.address);
+      setSwapState(refreshed);
+      setSwapMessage(
+        `Swap submitted: ${swapFromAmount} ${currentSwapPair.from.symbol} → ~${swapToAmount || "0"} ${currentSwapPair.to.symbol}`
+      );
+      setSwapFromAmount("");
+      setSwapToAmount("");
+    } catch (err) {
+      setSwapError(err.message || "Swap failed.");
+    } finally {
+      setSwapSubmitting(false);
+    }
   };
 
   const renderSwapSection = () => {
+    const needsApproval = !!swapState && !currentSwapPair.from.approved;
+
     return (
       <div className="terminal-card swap-card-centered">
         <div className="terminal-header">
@@ -107,13 +297,17 @@ function App() {
         <div className="trade-card">
           <div className="card-topline">
             <span>Swap</span>
-            <button className="mini-link">Settings</button>
+            <button className="mini-link" onClick={handleConnectWallet}>
+              {wallet?.address
+                ? `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`
+                : "Connect Wallet"}
+            </button>
           </div>
 
           <div className="token-panel">
             <div className="token-panel-header">
               <span>You pay</span>
-              <span>Balance: 124.82</span>
+              <span>{swapState ? currentSwapPair.from.symbol : "Loading..."}</span>
             </div>
             <div className="token-row">
               <input
@@ -123,7 +317,9 @@ function App() {
                 onChange={(e) => setSwapFromAmount(e.target.value)}
                 className="amount-input"
               />
-              <button className="token-select">{swapFromToken}</button>
+              <button className="token-select">
+                {swapState ? currentSwapPair.from.symbol : "Token A"}
+              </button>
             </div>
           </div>
 
@@ -134,36 +330,66 @@ function App() {
           <div className="token-panel">
             <div className="token-panel-header">
               <span>You receive</span>
-              <span>Balance: 4,921.14</span>
+              <span>{swapState ? currentSwapPair.to.symbol : "Loading..."}</span>
             </div>
             <div className="token-row">
               <input
                 type="number"
                 placeholder="0.0"
                 value={swapToAmount}
-                onChange={(e) => setSwapToAmount(e.target.value)}
+                readOnly
                 className="amount-input"
               />
-              <button className="token-select">{swapToToken}</button>
+              <button className="token-select">
+                {swapState ? currentSwapPair.to.symbol : "Token B"}
+              </button>
             </div>
           </div>
 
           <div className="detail-box">
             <div className="detail-row">
               <span>Route</span>
-              <span>FRAP → xBond → {swapToToken}</span>
+              <span>
+                {swapState
+                  ? `${currentSwapPair.from.symbol} → ${currentSwapPair.to.symbol}`
+                  : "—"}
+              </span>
             </div>
             <div className="detail-row">
-              <span>Network fee</span>
-              <span>0.0021 ETH</span>
+              <span>Rate</span>
+              <span>{currentSwapPair.rateLabel}</span>
             </div>
             <div className="detail-row">
-              <span>Encrypted message</span>
-              <span>Owner-only</span>
+              <span>Operator</span>
+              <span>{needsApproval ? "Approval needed" : "Approved"}</span>
+            </div>
+            <div className="detail-row">
+              <span>Network</span>
+              <span>Arbitrum Sepolia</span>
             </div>
           </div>
 
-          <button className="primary-action">Execute Swap</button>
+          {swapLoading && <p className="swap-helper-text">Loading swap contract state…</p>}
+          {swapMessage && <p className="swap-helper-text success">{swapMessage}</p>}
+          {swapError && <p className="swap-helper-text error">{swapError}</p>}
+
+          <div className="swap-action-stack">
+            <button
+              className="secondary-action"
+              onClick={handleApproveSwap}
+              disabled={swapSubmitting || swapLoading || !swapState || !needsApproval}
+            >
+              {needsApproval ? `Approve ${currentSwapPair.from.symbol}` : "Operator Approved"}
+            </button>
+
+            <button
+              className="primary-action"
+              onClick={handleExecuteSwap}
+              disabled={swapSubmitting || swapLoading || !swapState}
+            >
+              {swapSubmitting ? "Processing..." : "Execute Swap"}
+            </button>
+          </div>
         </div>
       </div>
     );
@@ -250,7 +476,9 @@ function App() {
                   onChange={(e) => setLimitPrice(e.target.value)}
                   className="config-input"
                 />
-                <small>1 {limitSellToken} = {limitPrice} {limitBuyToken}</small>
+                <small>
+                  1 {limitSellToken} = {limitPrice} {limitBuyToken}
+                </small>
               </div>
 
               <div className="config-card">
@@ -296,15 +524,21 @@ function App() {
             <div className="summary-block">
               <div className="summary-row">
                 <span>Sell</span>
-                <strong>{limitSellAmount || "0.0"} {limitSellToken}</strong>
+                <strong>
+                  {limitSellAmount || "0.0"} {limitSellToken}
+                </strong>
               </div>
               <div className="summary-row">
                 <span>Receive</span>
-                <strong>{limitBuyAmount || "0.0"} {limitBuyToken}</strong>
+                <strong>
+                  {limitBuyAmount || "0.0"} {limitBuyToken}
+                </strong>
               </div>
               <div className="summary-row">
                 <span>Trigger Price</span>
-                <strong>{limitPrice} {limitBuyToken}</strong>
+                <strong>
+                  {limitPrice} {limitBuyToken}
+                </strong>
               </div>
               <div className="summary-row">
                 <span>Expiry</span>
@@ -335,6 +569,7 @@ function App() {
             <span>⌕</span>
             <input placeholder="Search eBond listings" />
           </div>
+
           <div className="marketplace-filters">
             <button className="filter-chip active">All</button>
             <button className="filter-chip">Short Term</button>
@@ -571,7 +806,11 @@ function App() {
           ))}
         </nav>
 
-        <button className="connect-btn">Connect Wallet</button>
+        <button className="connect-btn" onClick={activeTab === "Swap" ? handleConnectWallet : undefined}>
+          {wallet?.address
+            ? `${wallet.address.slice(0, 6)}...${wallet.address.slice(-4)}`
+            : "Connect Wallet"}
+        </button>
       </header>
 
       <main className="main-content">
