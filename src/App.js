@@ -63,8 +63,8 @@ function App() {
   const [swapFromAmount, setSwapFromAmount] = useState("");
   const [swapToAmount, setSwapToAmount] = useState("");
 
-  const [limitSellToken, setLimitSellToken] = useState("ETH");
-  const [limitBuyToken, setLimitBuyToken] = useState("FRAP");
+  const [limitSellToken] = useState("ETH");
+  const [limitBuyToken] = useState("FRAP");
   const [limitSellAmount, setLimitSellAmount] = useState("");
   const [limitBuyAmount, setLimitBuyAmount] = useState("");
   const [limitPrice, setLimitPrice] = useState("2450.00");
