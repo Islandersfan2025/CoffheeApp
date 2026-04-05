@@ -23,6 +23,8 @@ const ebondListings = [
     price: "$96.40",
     supply: "1,250",
     collateral: "USDC",
+    description:
+      "A short-duration fixed-income eBond backed by Coffhee protocol reserves, designed for simple demo marketplace purchases.",
   },
   {
     id: "EBOND-002",
@@ -32,6 +34,8 @@ const ebondListings = [
     price: "$93.10",
     supply: "820",
     collateral: "USD.e",
+    description:
+      "A medium-term yield note with a discounted entry price and a higher projected return profile for marketplace buyers.",
   },
   {
     id: "EBOND-003",
@@ -41,6 +45,8 @@ const ebondListings = [
     price: "$88.75",
     supply: "410",
     collateral: "USDT",
+    description:
+      "A long-duration eBond structured for demo treasury-style exposure, with deeper discounting and longer maturity.",
   },
 ];
 
@@ -68,6 +74,10 @@ function App() {
   const [eusdSourceToken, setEusdSourceToken] = useState("USDC");
   const [eusdDepositAmount, setEusdDepositAmount] = useState("");
   const [eusdLockPeriod, setEusdLockPeriod] = useState("30 Days");
+
+  const [selectedBond, setSelectedBond] = useState(ebondListings[0]);
+  const [bondMintAmount, setBondMintAmount] = useState("1");
+  const [bondActionMessage, setBondActionMessage] = useState("");
 
   const pageMeta = useMemo(() => {
     switch (activeTab) {
@@ -280,6 +290,26 @@ function App() {
     } finally {
       setSwapSubmitting(false);
     }
+  };
+
+  const handleViewBond = (bond) => {
+    setSelectedBond(bond);
+    setBondMintAmount("1");
+    setBondActionMessage("");
+  };
+
+  const handleMintBond = () => {
+    if (!selectedBond) return;
+    const qty = Number(bondMintAmount);
+
+    if (!qty || qty <= 0) {
+      setBondActionMessage("Enter a valid token amount.");
+      return;
+    }
+
+    setBondActionMessage(
+      `Demo action: ${qty} ${selectedBond.id} token${qty > 1 ? "s" : ""} ready to purchase/mint.`
+    );
   };
 
   const renderSwapSection = () => {
@@ -609,13 +639,71 @@ function App() {
                   <td>{bond.supply}</td>
                   <td>{bond.collateral}</td>
                   <td>
-                    <button className="table-action-btn">View</button>
+                    <button
+                      className="table-action-btn"
+                      onClick={() => handleViewBond(bond)}
+                    >
+                      View
+                    </button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </table>
         </div>
+
+        {selectedBond && (
+          <div className="bond-info-card">
+            <div className="bond-info-header">
+              <div>
+                <span className="bond-info-eyebrow">Selected eBond</span>
+                <h3>{selectedBond.name}</h3>
+                <p>{selectedBond.description}</p>
+              </div>
+              <div className="bond-info-badge">Mint / Purchase</div>
+            </div>
+
+            <div className="bond-info-grid">
+              <div className="bond-info-stat">
+                <span>Maturity</span>
+                <strong>{selectedBond.maturity}</strong>
+              </div>
+              <div className="bond-info-stat">
+                <span>APR</span>
+                <strong>{selectedBond.apr}</strong>
+              </div>
+              <div className="bond-info-stat">
+                <span>Price</span>
+                <strong>{selectedBond.price}</strong>
+              </div>
+              <div className="bond-info-stat">
+                <span>Collateral</span>
+                <strong>{selectedBond.collateral}</strong>
+              </div>
+            </div>
+
+            <div className="bond-action-row">
+              <div className="bond-amount-box">
+                <label>Token Amount</label>
+                <input
+                  type="number"
+                  min="1"
+                  value={bondMintAmount}
+                  onChange={(e) => setBondMintAmount(e.target.value)}
+                  className="bond-amount-input"
+                />
+              </div>
+
+              <button className="primary-action bond-action-btn" onClick={handleMintBond}>
+                Purchase / Mint Token
+              </button>
+            </div>
+
+            {bondActionMessage && (
+              <p className="swap-helper-text success">{bondActionMessage}</p>
+            )}
+          </div>
+        )}
 
         <div className="bottom-grid marketplace-bottom">
           <div className="info-panel">
