@@ -1,16 +1,11 @@
+/* global BigInt */
 import { ethers } from "ethers";
 
-/**
- * CoffheeSwap README publishes the swap contract on Arb Sepolia.
- * The repo does NOT publish real tokenA/tokenB addresses yet,
- * so fill those two values in after you deploy or confirm them.
- */
-/* global BigInt */
 export const SWAP_CONFIG = {
   arbSepolia: {
     chainId: 421614,
     name: "Arbitrum Sepolia",
-    swapAddress: "0xd30B60e2b53133899CC10c9f53eb61C05e053CF0",
+    swapAddress: "0xe109c785dD5a143BA65beAffa4Db6c31f40395A8",
     rpcUrl: process.env.REACT_APP_ARB_SEPOLIA_RPC_URL || "",
     tokenAAddress: process.env.REACT_APP_SWAP_TOKEN_A || "",
     tokenBAddress: process.env.REACT_APP_SWAP_TOKEN_B || "",
@@ -39,9 +34,14 @@ export const CONFIDENTIAL_TOKEN_ABI = [
   "function isOperator(address holder, address operator) view returns (bool)",
 ];
 
-/**
- * Returns an EIP-1193 browser provider if a wallet is installed.
- */
+function getConfig(networkKey = "arbSepolia") {
+  const config = SWAP_CONFIG[networkKey];
+  if (!config) {
+    throw new Error(`Unknown swap network: ${networkKey}`);
+  }
+  return config;
+}
+
 export async function getBrowserProvider() {
   if (!window.ethereum) {
     throw new Error("No wallet detected. Please install MetaMask or another EVM wallet.");
@@ -51,47 +51,60 @@ export async function getBrowserProvider() {
 }
 
 /**
- * Read-only provider for public reads.
- * Prefers a configured RPC. Falls back to browser provider if available.
+ * Read-only provider for contract reads.
+ * Uses a fixed RPC so reads do not accidentally follow the wallet's current network.
  */
 export async function getReadProvider(networkKey = "arbSepolia") {
-  const config = SWAP_CONFIG[networkKey];
+  const config = getConfig(networkKey);
 
-  if (config.rpcUrl) {
-    return new ethers.JsonRpcProvider(config.rpcUrl);
+  if (!config.rpcUrl) {
+    throw new Error(
+      "Missing REACT_APP_ARB_SEPOLIA_RPC_URL. Add it to your .env file and restart the app."
+    );
   }
 
-  if (window.ethereum) {
-    return new ethers.BrowserProvider(window.ethereum);
-  }
-
-  throw new Error(
-    "No read provider available. Set REACT_APP_ARB_SEPOLIA_RPC_URL or open the app in a browser wallet."
-  );
+  return new ethers.JsonRpcProvider(config.rpcUrl);
 }
 
-export async function requestSwapWallet() {
+export async function requestSwapWallet(networkKey = "arbSepolia") {
+  const config = getConfig(networkKey);
   const provider = await getBrowserProvider();
+
   await provider.send("eth_requestAccounts", []);
   const signer = await provider.getSigner();
   const address = await signer.getAddress();
   const network = await provider.getNetwork();
+  const chainId = Number(network.chainId);
+
+  if (chainId !== config.chainId) {
+    throw new Error(
+      `Wrong wallet network. Please switch to ${config.name} (${config.chainId}). Current chainId: ${chainId}`
+    );
+  }
 
   return {
     provider,
     signer,
     address,
-    chainId: Number(network.chainId),
+    chainId,
   };
 }
 
 export function getSwapContract(providerOrSigner, networkKey = "arbSepolia") {
-  const config = SWAP_CONFIG[networkKey];
+  const config = getConfig(networkKey);
+
+  if (!ethers.isAddress(config.swapAddress)) {
+    throw new Error(`Invalid swap contract address: ${config.swapAddress}`);
+  }
 
   return new ethers.Contract(config.swapAddress, SWAP_ABI, providerOrSigner);
 }
 
 export function getConfidentialTokenContract(address, providerOrSigner) {
+  if (!ethers.isAddress(address)) {
+    throw new Error(`Invalid token address: ${address}`);
+  }
+
   return new ethers.Contract(address, CONFIDENTIAL_TOKEN_ABI, providerOrSigner);
 }
 
@@ -108,38 +121,73 @@ export function estimateSwapOutputRaw(amountIn, numerator, denominator) {
 }
 
 export async function fetchSwapState(provider, walletAddress = null, networkKey = "arbSepolia") {
-  const config = SWAP_CONFIG[networkKey];
+  const config = getConfig(networkKey);
+  const network = await provider.getNetwork();
+  const chainId = Number(network.chainId);
+
+  console.log("READ PROVIDER CHAIN:", chainId);
+  console.log("SWAP ADDRESS:", config.swapAddress);
+
+  if (chainId !== config.chainId) {
+    throw new Error(
+      `Swap reads must use ${config.name} (${config.chainId}). Current provider chainId: ${chainId}`
+    );
+  }
+
+  const code = await provider.getCode(config.swapAddress);
+  console.log("SWAP CONTRACT CODE:", code);
+
+  if (!code || code === "0x") {
+    throw new Error(
+      `No contract found at ${config.swapAddress} on ${config.name}.`
+    );
+  }
+
   const swap = getSwapContract(provider, networkKey);
 
-  const [
-    tokenAAddressFromSwap,
-    tokenBAddressFromSwap,
-    rateAToBNumerator,
-    rateAToBDenominator,
-    rateBToANumerator,
-    rateBToADenominator,
-  ] = await Promise.all([
-    swap.tokenA(),
-    swap.tokenB(),
-    swap.rateAToBNumerator(),
-    swap.rateAToBDenominator(),
-    swap.rateBToANumerator(),
-    swap.rateBToADenominator(),
-  ]);
+  let tokenAAddressFromSwap;
+  let tokenBAddressFromSwap;
+  let rateAToBNumerator;
+  let rateAToBDenominator;
+  let rateBToANumerator;
+  let rateBToADenominator;
+
+  try {
+    [
+      tokenAAddressFromSwap,
+      tokenBAddressFromSwap,
+      rateAToBNumerator,
+      rateAToBDenominator,
+      rateBToANumerator,
+      rateBToADenominator,
+    ] = await Promise.all([
+      swap.tokenA(),
+      swap.tokenB(),
+      swap.rateAToBNumerator(),
+      swap.rateAToBDenominator(),
+      swap.rateBToANumerator(),
+      swap.rateBToADenominator(),
+    ]);
+  } catch (err) {
+    console.error("Swap contract read failed:", err);
+    throw new Error(
+      "Contract exists, but tokenA/tokenB/rate reads failed. Check deployment, ABI, and network."
+    );
+  }
 
   const tokenAAddress =
-    tokenAAddressFromSwap && tokenAAddressFromSwap !== ethers.ZeroAddress
+    ethers.isAddress(tokenAAddressFromSwap) && tokenAAddressFromSwap !== ethers.ZeroAddress
       ? tokenAAddressFromSwap
       : config.tokenAAddress;
 
   const tokenBAddress =
-    tokenBAddressFromSwap && tokenBAddressFromSwap !== ethers.ZeroAddress
+    ethers.isAddress(tokenBAddressFromSwap) && tokenBAddressFromSwap !== ethers.ZeroAddress
       ? tokenBAddressFromSwap
       : config.tokenBAddress;
 
-  if (!tokenAAddress || !tokenBAddress) {
+  if (!ethers.isAddress(tokenAAddress) || !ethers.isAddress(tokenBAddress)) {
     throw new Error(
-      "Token A / Token B addresses are missing. Fill REACT_APP_SWAP_TOKEN_A and REACT_APP_SWAP_TOKEN_B if the contract read does not return them."
+      "Token A / Token B addresses are invalid or missing. Redeploy with real token addresses or set REACT_APP_SWAP_TOKEN_A and REACT_APP_SWAP_TOKEN_B."
     );
   }
 
@@ -159,7 +207,7 @@ export async function fetchSwapState(provider, walletAddress = null, networkKey 
   let tokenAApproved = false;
   let tokenBApproved = false;
 
-  if (walletAddress) {
+  if (walletAddress && ethers.isAddress(walletAddress)) {
     [tokenAApproved, tokenBApproved] = await Promise.all([
       safeReadBool(() => tokenA.isOperator(walletAddress, config.swapAddress), false),
       safeReadBool(() => tokenB.isOperator(walletAddress, config.swapAddress), false),
@@ -203,9 +251,13 @@ export async function approveSwapOperator({
   networkKey = "arbSepolia",
   validForSeconds = 60 * 60 * 24 * 365,
 }) {
-  const config = SWAP_CONFIG[networkKey];
-  const token = getConfidentialTokenContract(tokenAddress, signer);
+  const config = getConfig(networkKey);
 
+  if (!ethers.isAddress(tokenAddress)) {
+    throw new Error(`Invalid token address: ${tokenAddress}`);
+  }
+
+  const token = getConfidentialTokenContract(tokenAddress, signer);
   const now = Math.floor(Date.now() / 1000);
   const until = now + validForSeconds;
 
@@ -214,20 +266,16 @@ export async function approveSwapOperator({
 }
 
 /**
- * IMPORTANT:
- * The contract expects an SDK-produced InEuint64 payload.
- * Because the repo does not include the exact browser helper wiring,
- * this function intentionally isolates that step so you only need to edit one place.
+ * Temporary encryption hook.
+ * Replace this with your real CoFHE browser SDK wiring.
  */
 export async function encryptUint64ForSwap(amount) {
   const normalized = BigInt(amount);
 
-  // Option 1: your app injects a helper
   if (window.coffheeEncryptUint64) {
     return await window.coffheeEncryptUint64(normalized);
   }
 
-  // Option 2: you attach a helper after initializing @cofhe/sdk
   if (window.cofhe && typeof window.cofhe.encryptUint64 === "function") {
     return await window.cofhe.encryptUint64(normalized);
   }
@@ -237,7 +285,7 @@ export async function encryptUint64ForSwap(amount) {
   }
 
   throw new Error(
-    "No browser encryption helper found. Wire your installed @cofhe/sdk encrypt method into encryptUint64ForSwap() in src/lib/swap.js."
+    "No browser encryption helper found. Wire your installed @cofhe/sdk encrypt method into encryptUint64ForSwap()."
   );
 }
 
