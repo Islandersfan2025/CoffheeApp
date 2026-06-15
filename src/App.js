@@ -151,7 +151,7 @@ function App() {
 
   const pageTitle = activeTab === "Trade" ? "Dark Pools" : activeTab === "eRWA" ? "eRWA Marketplace" : "Mint eUSD";
   const pageDesc = activeTab === "Trade" 
-    ? "Powered by the Schrödinger Hook (Uniswap V4), Coffhee pools are automated portfolio manager that continuously monitors and rebalances assets without revealing the underlying strategy to the market."
+    ? "Powered by the Schrödinger Hook (Uniswap V4), Coffhee pools are automated portfolio managers that continuously monitors and rebalances assets without revealing the underlying strategy to the market."
     : activeTab === "eRWA" ? "Browse and acquire eRWA token listings backed by fixed-income products."
     : "Acquire the eUSD stablecoin by locking approved collateral assets into the protocol.";
 
