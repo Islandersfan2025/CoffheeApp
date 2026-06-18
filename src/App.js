@@ -13,7 +13,7 @@ const API_BASE =
 const SCHRODINGER_HOOK_ADDRESS =
   "0xC4Dd117e53f9624ED2EE02e6c8CD662645F6e56A";
 
-const tabs = ["Trade", "eRWA", "eUSD"];
+const tabs = ["Trade", "Markets", "eUSD"];
 
 // Structured position states matching your multi-asset Plan schema (MAX_ASSETS = 8)
 const initialPositions = [
@@ -861,7 +861,7 @@ const handleMockRebalance = async () => {
           </div>
 
           {activeTab === "Trade" && renderSchrodingerHookSection()}
-          {activeTab === "eRWA" && renderLendSection()}
+          {activeTab === "Markets" && renderLendSection()}
           {activeTab === "eUSD" && renderEusdSection()}
         </section>
       </main>
