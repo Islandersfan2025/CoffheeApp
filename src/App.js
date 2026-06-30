@@ -140,8 +140,8 @@ function App() {
   const [joinPoolMessage, setJoinPoolMessage] = useState("");
 
   // Plan Controls
-  const [rebalanceThreshold, setRebalanceThreshold] = useState("150");
-  const [volatilityBps, setVolatilityBps] = useState("400");
+  const [rebalanceThreshold] = useState("150");
+  const [volatilityBps] = useState("400");
   const [isPlanActive, setIsPlanActive] = useState(true);
 
   // Decrypt & Access Control State
