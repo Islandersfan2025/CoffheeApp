@@ -162,7 +162,7 @@ function App() {
 
   const pageTitle = activeTab === "Trade" ? "Dark Roast Pools" : activeTab === "Markets" ? "Shielded Marketplace" : "Mint eUSD";
   const pageDesc = activeTab === "Trade" 
-    ? "Powered by the Uniswap V4, Coffhee's dark pools are automated portfolio managers that continuously monitors and rebalances assets without revealing the underlying strategy to the market."
+    ? "Powered by Uniswap V4, Coffhee's dark pools are automated portfolio managers that continuously monitors and rebalances assets without revealing the underlying strategy to the market."
     : activeTab === "Markets" ? "Browse Coffhee's shielded asset markets backed by fixed-income products."
     : "Acquire the eUSD stablecoin by locking approved collateral assets into the protocol.";
 
@@ -513,11 +513,11 @@ const handleMockRebalance = async () => {
           <div style={{ padding: "15px", borderRight: "1px solid #1a1a1a", background: "#070707", display: "flex", flexDirection: "column", gap: "15px" }}>
             <div style={{ borderBottom: "1px solid #1a1a1a", paddingBottom: "15px" }}>
               <div style={{ fontSize: "14px", fontWeight: "700", color: "#fff", marginBottom: "4px" }}>
-                Enter a Private Pool
+                Enter a Dark Pool
               </div>
 
               <div style={{ fontSize: "11px", color: "#777", marginBottom: "15px", lineHeight: 1.5 }}>
-                Deposit your Coffhee assets into a private pool. The strategy monitors and rebalances in the background.
+                Deposit your Coffhee assets into a dark pool. The strategy monitors and rebalances in the background.
               </div>
 
               <div style={{ marginBottom: "12px" }}>
