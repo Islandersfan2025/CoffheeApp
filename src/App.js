@@ -162,7 +162,7 @@ function App() {
 
   const pageTitle = activeTab === "Trade" ? "Dark Roast Pools" : activeTab === "Markets" ? "Shielded Marketplace" : "Mint eUSD";
   const pageDesc = activeTab === "Trade" 
-    ? "Powered by the Schrödinger Hook (Uniswap V4), Coffhee's dark pools are automated portfolio managers that continuously monitors and rebalances assets without revealing the underlying strategy to the market."
+    ? "Powered by the Uniswap V4, Coffhee's dark pools are automated portfolio managers that continuously monitors and rebalances assets without revealing the underlying strategy to the market."
     : activeTab === "Markets" ? "Browse Coffhee's shielded asset markets backed by fixed-income products."
     : "Acquire the eUSD stablecoin by locking approved collateral assets into the protocol.";
 
