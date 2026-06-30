@@ -19,7 +19,7 @@ const tabs = ["Trade", "Markets", "eUSD"];
 const initialPositions = [
   {
     assetIndex: 0,
-    pair: "cETH / eUSD",
+    pair: "eETH / eUSD",
     ticker: "cETH",
     tokenAddress: "0x742d35Cc6634C0532925a3b844Bc454e4438f44e",
     exposure: "4,120 BPS",
@@ -31,7 +31,7 @@ const initialPositions = [
   },
   {
     assetIndex: 1,
-    pair: "cFRAP / eUSD",
+    pair: "eFRAP / eUSD",
     ticker: "cFRAP",
     tokenAddress: "0x111111111117dc0aa78b770fa6a738034120c302",
     exposure: "2,450 BPS",
@@ -43,7 +43,7 @@ const initialPositions = [
   },
   {
     assetIndex: 2,
-    pair: "cWBTC / eUSD",
+    pair: "eBTC / eUSD",
     ticker: "cWBTC",
     tokenAddress: "0x2260fac5e5542a773aa44fbcfedf7c193bc2c599",
     exposure: "1,890 BPS",
@@ -54,6 +54,11 @@ const initialPositions = [
     poolType: "Encrypted Yield Pool"
   }
 ];
+
+const mockPools = initialPositions.map((position) => ({
+  id: `POOL-${position.assetIndex}`,
+  ...position
+}));
 
 const ebondListings = [
   {
@@ -128,6 +133,12 @@ function App() {
   const [hookMessage, setHookMessage] = useState("");
   const [hookError, setHookError] = useState("");
 
+  // Simple Enter Pool UI State
+  const [selectedPool, setSelectedPool] = useState(mockPools[2]);
+  const [poolDepositToken, setPoolDepositToken] = useState("eUSD");
+  const [poolDepositAmount, setPoolDepositAmount] = useState("");
+  const [joinPoolMessage, setJoinPoolMessage] = useState("");
+
   // Plan Controls
   const [rebalanceThreshold, setRebalanceThreshold] = useState("150");
   const [volatilityBps, setVolatilityBps] = useState("400");
@@ -149,9 +160,9 @@ function App() {
   const [bondMintAmount, setBondMintAmount] = useState("1");
   const [bondActionMessage, setBondActionMessage] = useState("");
 
-  const pageTitle = activeTab === "Trade" ? "Dark Roast Pools" : activeTab === "Markets" ? "Shielded Marketplace" : "Mint eUSD";
+  const pageTitle = activeTab === "Trade" ? "Schrodinger Pools" : activeTab === "Markets" ? "Shielded Marketplace" : "Mint eUSD";
   const pageDesc = activeTab === "Trade" 
-    ? "Powered by the Schrödinger Hook (Uniswap V4), Coffhee pools are automated portfolio managers that continuously rebalances assets without revealing the underlying strategy to the market."
+    ? "The Schrödinger Hook is an automated portfolio manager that continuously monitors and rebalances assets without revealing the underlying strategy to the market."
     : activeTab === "Markets" ? "Browse Coffhee's shielded asset markets backed by fixed-income products."
     : "Acquire the eUSD stablecoin by locking approved collateral assets into the protocol.";
 
@@ -195,6 +206,64 @@ function App() {
     }
 
     setHookError(err.message || "Wallet connection failed.");
+  }
+};
+
+  const handleJoinPool = async () => {
+  try {
+    setHookLoading(true);
+    setHookError("");
+    setHookMessage("");
+    setJoinPoolMessage("");
+
+    if (!wallet?.address) {
+      throw new Error("Connect your wallet before entering a pool.");
+    }
+
+    if (!selectedPool) {
+      throw new Error("Select a pool first.");
+    }
+
+    if (!poolDepositAmount || Number(poolDepositAmount) <= 0) {
+      throw new Error("Enter a valid deposit amount.");
+    }
+
+    const res = await fetch(`${API_BASE}/api/join-pool`, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json"
+      },
+      body: JSON.stringify({
+        hookAddress: SCHRODINGER_HOOK_ADDRESS,
+        owner: wallet.address,
+        pair: selectedPool.pair,
+        assetIndex: selectedPool.assetIndex,
+        depositToken: poolDepositToken,
+        amount: poolDepositAmount,
+        strategy: "Dark Pool JIT Rebalancing"
+      })
+    });
+
+    const data = await res.json();
+
+    if (!res.ok) {
+      throw new Error(data.error || "Unable to enter pool.");
+    }
+
+    setJoinPoolMessage(
+      data.message ||
+        `Entered ${selectedPool.pair} with ${poolDepositAmount} ${poolDepositToken}.`
+    );
+
+    setHookMessage(
+      data.txHash
+        ? `Pool entry submitted: ${data.txHash}`
+        : "Pool entry submitted in demo mode."
+    );
+  } catch (err) {
+    setHookError(err.message);
+  } finally {
+    setHookLoading(false);
   }
 };
 
@@ -443,77 +512,132 @@ const handleMockRebalance = async () => {
         <div style={{ display: "grid", gridTemplateColumns: "310px 1fr", minHeight: "500px" }}>
           <div style={{ padding: "15px", borderRight: "1px solid #1a1a1a", background: "#070707", display: "flex", flexDirection: "column", gap: "15px" }}>
             <div style={{ borderBottom: "1px solid #1a1a1a", paddingBottom: "15px" }}>
-              <div style={{ fontSize: "11px", color: "#888", marginBottom: "8px", fontWeight: "700" }}>Dark Pool Strategy Setting</div>
-              
-              <div style={{ marginBottom: "10px" }}>
-                <label style={{ display: "block", fontSize: "10px", color: "#666", marginBottom: "3px" }}>rebalanceThresholdBps</label>
-                <div style={{ background: "#111", border: "1px solid #222", padding: "4px 8px", borderRadius: "3px", display: "flex" }}>
-                  <input type="number" value={rebalanceThreshold} onChange={(e) => setRebalanceThreshold(e.target.value)} style={{ background: "transparent", border: "none", color: "#fff", width: "100%", fontSize: "12px", outline: "none" }} />
-                  <span style={{ fontSize: "10px", color: "#444" }}>BPS</span>
-                </div>
+              <div style={{ fontSize: "14px", fontWeight: "700", color: "#fff", marginBottom: "4px" }}>
+                Enter a Private Pool
+              </div>
+
+              <div style={{ fontSize: "11px", color: "#777", marginBottom: "15px", lineHeight: 1.5 }}>
+                Deposit your Coffhee assets into a private pool. The strategy monitors and rebalances in the background.
               </div>
 
               <div style={{ marginBottom: "12px" }}>
-                <label style={{ display: "block", fontSize: "10px", color: "#666", marginBottom: "3px" }}>volatilityBps</label>
-                <div style={{ background: "#111", border: "1px solid #222", padding: "4px 8px", borderRadius: "3px", display: "flex" }}>
-                  <input type="number" value={volatilityBps} onChange={(e) => setVolatilityBps(e.target.value)} style={{ background: "transparent", border: "none", color: "#fff", width: "100%", fontSize: "12px", outline: "none" }} />
-                  <span style={{ fontSize: "10px", color: "#444" }}>BPS</span>
-                </div>
+                <label style={{ display: "block", fontSize: "11px", color: "#666", marginBottom: "5px" }}>
+                  Select Pool
+                </label>
+                <select
+                  value={selectedPool?.pair || ""}
+                  onChange={(e) => {
+                    const pool = mockPools.find((p) => p.pair === e.target.value);
+                    setSelectedPool(pool || null);
+                    setJoinPoolMessage("");
+                  }}
+                  style={{ width: "100%", padding: "9px", background: "#111", border: "1px solid #222", borderRadius: "4px", color: "#fff", outline: "none" }}
+                >
+                  <option value="">Choose a Pool</option>
+                  {mockPools.map((pool) => (
+                    <option key={pool.id} value={pool.pair}>
+                      {pool.pair}
+                    </option>
+                  ))}
+                </select>
               </div>
 
-             <div style={{ display: "flex", gap: "8px" }}>
+              <div style={{ marginBottom: "12px" }}>
+                <label style={{ display: "block", fontSize: "11px", color: "#666", marginBottom: "5px" }}>
+                  Deposit Asset
+                </label>
+                <select
+                  value={poolDepositToken}
+                  onChange={(e) => {
+                    setPoolDepositToken(e.target.value);
+                    setJoinPoolMessage("");
+                  }}
+                  style={{ width: "100%", padding: "9px", background: "#111", border: "1px solid #222", borderRadius: "4px", color: "#fff", outline: "none" }}
+                >
+                  <option>eUSD</option>
+                  <option>eBTC</option>
+                  <option>eETH</option>
+                  <option>eLINK</option>
+                  <option>eHYPE</option>
+                  <option>eTSLA</option>
+                </select>
+              </div>
+
+              <div style={{ marginBottom: "14px" }}>
+                <label style={{ display: "block", fontSize: "11px", color: "#666", marginBottom: "5px" }}>
+                  Amount
+                </label>
+                <input
+                  type="number"
+                  placeholder="0.00"
+                  value={poolDepositAmount}
+                  onChange={(e) => {
+                    setPoolDepositAmount(e.target.value);
+                    setJoinPoolMessage("");
+                  }}
+                  style={{ width: "100%", padding: "9px", background: "#111", border: "1px solid #222", borderRadius: "4px", color: "#fff", outline: "none", boxSizing: "border-box" }}
+                />
+              </div>
+
+              {selectedPool && (
+                <div style={{ background: "#0b0b0b", border: "1px solid #1c1c1c", borderRadius: "5px", padding: "12px", marginBottom: "14px" }}>
+                  <div style={{ color: "#fff", fontWeight: "600", marginBottom: "6px" }}>
+                    {selectedPool.pair}
+                  </div>
+                  <div style={{ color: "#888", fontSize: "11px" }}>
+                    Pool Type
+                  </div>
+                  <div style={{ color: "#fff", fontSize: "12px", marginBottom: "10px" }}>
+                    {selectedPool.poolType}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: "11px", color: "#777" }}>
+                    <span>Status</span>
+                    <span style={{ color: "#a3e635" }}>{selectedPool.status}</span>
+                  </div>
+                </div>
+              )}
+
               <button
-                onClick={handleUpdateInputs}
-                disabled={hookLoading}
-                style={{
-                 flex: 1,
-                 padding: "6px",
-                 background: "#161616",
-                 border: "1px solid #333",
-                 color: "#fff",
-                 fontSize: "11px",
-                 borderRadius: "3px",
-                 cursor: "pointer"
-                 }}
-               >
-               Update Strategy
+                onClick={handleJoinPool}
+                disabled={hookLoading || !selectedPool || !poolDepositAmount}
+                style={{ width: "100%", padding: "11px", background: "#a3e635", color: "#000", border: "none", borderRadius: "4px", fontWeight: "700", cursor: hookLoading || !selectedPool || !poolDepositAmount ? "not-allowed" : "pointer", opacity: hookLoading || !selectedPool || !poolDepositAmount ? 0.65 : 1 }}
+              >
+                {hookLoading ? "Entering Pool..." : "Enter Pool"}
               </button>
 
-              {isPlanActive && (
-             <button
-          onClick={handleDeactivatePlan}
-          style={{
-            padding: "6px",
-            background: "rgba(239,68,68,0.1)",
-            border: "1px solid #ef4444",
-            color: "#ef4444",
-            fontSize: "11px",
-            borderRadius: "3px",
-            cursor: "pointer"
-           }}
-           >
-            Pause Plan
-          </button>
-        )}
+              <div style={{ display: "flex", gap: "8px", marginTop: "10px" }}>
+                <button
+                  onClick={handleUpdateInputs}
+                  disabled={hookLoading}
+                  style={{ flex: 1, padding: "6px", background: "#161616", border: "1px solid #333", color: "#fff", fontSize: "11px", borderRadius: "3px", cursor: "pointer" }}
+                >
+                  Save Settings
+                </button>
 
-        <button
-            onClick={handleMockRebalance}
-            disabled={hookLoading}
-          style={{
-            flex: 1,
-            padding: "6px",
-            background: "rgba(163,230,21,0.08)",
-            border: "1px solid #a3e635",
-            color: "#a3e635",
-            fontSize: "11px",
-            borderRadius: "3px",
-            cursor: "pointer",
-            fontWeight: "600"
-           }}
-         >
-          Run Mock Rebalance
-          </button>
-            </div>
+                {isPlanActive && (
+                  <button
+                    onClick={handleDeactivatePlan}
+                    disabled={hookLoading}
+                    style={{ padding: "6px", background: "rgba(239,68,68,0.1)", border: "1px solid #ef4444", color: "#ef4444", fontSize: "11px", borderRadius: "3px", cursor: "pointer" }}
+                  >
+                    Pause
+                  </button>
+                )}
+
+                <button
+                  onClick={handleMockRebalance}
+                  disabled={hookLoading}
+                  style={{ flex: 1, padding: "6px", background: "rgba(163,230,21,0.08)", border: "1px solid #a3e635", color: "#a3e635", fontSize: "11px", borderRadius: "3px", cursor: "pointer", fontWeight: "600" }}
+                >
+                  Preview
+                </button>
+              </div>
+
+              {joinPoolMessage && (
+                <div style={{ marginTop: "12px", color: "#a3e635", fontSize: "11px" }}>
+                  {joinPoolMessage}
+                </div>
+              )}
             </div>
 
             <div>
@@ -628,7 +752,7 @@ const handleMockRebalance = async () => {
                         onClick={() => handleGrantRowAccess(pos.assetIndex, pos.ticker)}
                         style={{ background: "rgba(163,230,21,0.08)", border: "1px solid #a3e635", color: "#a3e635", fontSize: "10px", padding: "4px 8px", borderRadius: "2px", cursor: "pointer", fontWeight: "600" }}
                       >
-                        grantPositionViewAccess()
+                        View Pool
                       </button>
                     </div>
                   </div>
@@ -708,7 +832,7 @@ const handleMockRebalance = async () => {
           <div className="bond-info-card">
             <div className="bond-info-header">
               <div>
-                <span className="bond-info-eyebrow">Selected eRWA</span>
+                <span className="bond-info-eyebrow">Selected Asset</span>
                 <h3>{selectedBond.name}</h3>
                 <p>{selectedBond.description}</p>
               </div>
