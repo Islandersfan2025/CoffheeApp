@@ -160,9 +160,9 @@ function App() {
   const [bondMintAmount, setBondMintAmount] = useState("1");
   const [bondActionMessage, setBondActionMessage] = useState("");
 
-  const pageTitle = activeTab === "Trade" ? "Schrodinger Pools" : activeTab === "Markets" ? "Shielded Marketplace" : "Mint eUSD";
+  const pageTitle = activeTab === "Trade" ? "Dark Roast Pools" : activeTab === "Markets" ? "Shielded Marketplace" : "Mint eUSD";
   const pageDesc = activeTab === "Trade" 
-    ? "The Schrödinger Hook is an automated portfolio manager that continuously monitors and rebalances assets without revealing the underlying strategy to the market."
+    ? "Powered by the Schrödinger Hook (Uniswap V4), Coffhee's dark pools are automated portfolio managers that continuously monitors and rebalances assets without revealing the underlying strategy to the market."
     : activeTab === "Markets" ? "Browse Coffhee's shielded asset markets backed by fixed-income products."
     : "Acquire the eUSD stablecoin by locking approved collateral assets into the protocol.";
 
