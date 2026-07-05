@@ -140,8 +140,8 @@ function App() {
   const [joinPoolMessage, setJoinPoolMessage] = useState("");
 
   // Plan Controls
-  const [rebalanceThreshold, setRebalanceThreshold] = useState("150");
-  const [volatilityBps, setVolatilityBps] = useState("400");
+  const [rebalanceThreshold] = useState("150");
+  const [volatilityBps] = useState("400");
   const [isPlanActive, setIsPlanActive] = useState(true);
 
   // Decrypt & Access Control State
@@ -538,23 +538,6 @@ const handleMockRebalance = async () => {
     setHookLoading(false);
   }
 };
-
-  // Missing eRWA Context Actions Resolved Here
-  const handleViewBond = (bond) => {
-    setSelectedBond(bond);
-    setBondMintAmount("1");
-    setBondActionMessage("");
-  };
-
-  const handleMintBond = () => {
-    if (!selectedBond) return;
-    const qty = Number(bondMintAmount);
-    if (!qty || qty <= 0) {
-      setBondActionMessage("Enter a valid token amount.");
-      return;
-    }
-    setBondActionMessage(`Demo action: ${qty} units of ${selectedBond.id} token purchased.`);
-  };
 
   const renderSchrodingerHookSection = () => {
     return (
