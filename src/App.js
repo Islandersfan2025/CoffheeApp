@@ -239,7 +239,7 @@ const [eAssetMintMessage, setEAssetMintMessage] = useState("");
 
   const pageTitle = activeTab === "Trade" ? "Dark Roast Pools" : activeTab === "Markets" ? "Shielded Marketplace" : "eAssets";
   const pageDesc = activeTab === "Trade" 
-    ? "The Schrödinger Hook is an automated portfolio manager that continuously monitors and rebalances assets without revealing the underlying strategy to the market."
+    ? "Powered by Uniswap V4, Coffhee's Dark Pools are for safe trading without revealing the underlying strategy to the market."
     : activeTab === "Markets" ? "Browse Coffhee's shielded asset markets backed by fixed-income products."
     : "Lock supported assets and mint encrypted Coffhee assets for private trading across dark pools.";
 
