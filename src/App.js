@@ -13,7 +13,7 @@ const API_BASE =
 const SCHRODINGER_HOOK_ADDRESS =
   "0xC4Dd117e53f9624ED2EE02e6c8CD662645F6e56A";
 
-const tabs = ["Trade", "Markets", "eUSD"];
+const tabs = ["Trade", "Markets", "eAssets"];
 
 // Structured position states matching your multi-asset Plan schema (MAX_ASSETS = 8)
 const initialPositions = [
@@ -140,8 +140,8 @@ function App() {
   const [joinPoolMessage, setJoinPoolMessage] = useState("");
 
   // Plan Controls
-  const [rebalanceThreshold] = useState("150");
-  const [volatilityBps] = useState("400");
+  const [rebalanceThreshold, setRebalanceThreshold] = useState("150");
+  const [volatilityBps, setVolatilityBps] = useState("400");
   const [isPlanActive, setIsPlanActive] = useState(true);
 
   // Decrypt & Access Control State
@@ -151,20 +151,97 @@ function App() {
   const [viewerAddress, setViewerAddress] = useState("");
 
   // eUSD UI States
-  const [eusdSourceToken, setEusdSourceToken] = useState("USDC");
-  const [eusdDepositAmount, setEusdDepositAmount] = useState("");
-  const [eusdLockPeriod, setEusdLockPeriod] = useState("30 Days");
+  const eAssetRoutes = [
+  {
+    symbol: "eUSD",
+    name: "Encrypted USD",
+    sourceChain: "Arbitrum Sepolia",
+    route: "stablecoin-to-eUSD",
+    acceptedCollateral: ["USD.e", "USDC", "USDT"],
+    defaultCollateral: "USDC",
+    backendEndpoint: "/api/mint-easset",
+  },
+  {
+    symbol: "eBTC",
+    name: "Encrypted Bitcoin",
+    sourceChain: "Ethereum Sepolia → Arbitrum Sepolia",
+    route: "tBTC-to-eBTC",
+    acceptedCollateral: ["tBTC"],
+    defaultCollateral: "tBTC",
+    backendEndpoint: "/api/mint-easset",
+  },
+  {
+    symbol: "eETH",
+    name: "Encrypted Ether",
+    sourceChain: "Ethereum Sepolia → Arbitrum Sepolia",
+    route: "ETH-to-eETH",
+    acceptedCollateral: ["WETH"],
+    defaultCollateral: "WETH",
+    backendEndpoint: "/api/mint-easset",
+  },
+  {
+    symbol: "eLINK",
+    name: "Encrypted LINK",
+    sourceChain: "Ethereum Sepolia → Arbitrum Sepolia",
+    route: "LINK-to-eLINK",
+    acceptedCollateral: ["LINK"],
+    defaultCollateral: "LINK",
+    backendEndpoint: "/api/mint-easset",
+  },
+  {
+    symbol: "eHYPE",
+    name: "Encrypted HYPE",
+    sourceChain: "Ethereum Sepolia → Arbitrum Sepolia",
+    route: "HYPE-to-eHYPE",
+    acceptedCollateral: ["HYPE"],
+    defaultCollateral: "HYPE",
+    backendEndpoint: "/api/mint-easset",
+  },
+  {
+    symbol: "eTSLA",
+    name: "Encrypted Tesla bStock",
+    sourceChain: "BNB Chain Testnet → Arbitrum Sepolia",
+    route: "bTSLA-to-eTSLA",
+    acceptedCollateral: ["bTSLA"],
+    defaultCollateral: "bTSLA",
+    backendEndpoint: "/api/mint-easset",
+  },
+  {
+    symbol: "eNVDA",
+    name: "Encrypted Nvidia bStock",
+    sourceChain: "BNB Chain Testnet → Arbitrum Sepolia",
+    route: "bNVDA-to-eNVDA",
+    acceptedCollateral: ["bNVDA"],
+    defaultCollateral: "bNVDA",
+    backendEndpoint: "/api/mint-easset",
+  },
+  {
+    symbol: "eAAPL",
+    name: "Encrypted Apple bStock",
+    sourceChain: "BNB Chain Testnet → Arbitrum Sepolia",
+    route: "bAAPL-to-eAAPL",
+    acceptedCollateral: ["bAAPL"],
+    defaultCollateral: "bAAPL",
+    backendEndpoint: "/api/mint-easset",
+  },
+];
+
+const [selectedEAsset, setSelectedEAsset] = useState(eAssetRoutes[0]);
+const [eAssetSourceToken, setEAssetSourceToken] = useState("USDC");
+const [eAssetDepositAmount, setEAssetDepositAmount] = useState("");
+const [eAssetLockPeriod, setEAssetLockPeriod] = useState("30 Days");
+const [eAssetMintMessage, setEAssetMintMessage] = useState("");
 
   // eRWA Marketplace UI States
   const [selectedBond, setSelectedBond] = useState(ebondListings[0]);
   const [bondMintAmount, setBondMintAmount] = useState("1");
   const [bondActionMessage, setBondActionMessage] = useState("");
 
-  const pageTitle = activeTab === "Trade" ? "Dark Roast Pools" : activeTab === "Markets" ? "Shielded Marketplace" : "Mint eUSD";
+  const pageTitle = activeTab === "Trade" ? "Dark Roast Pools" : activeTab === "Markets" ? "Shielded Marketplace" : "eAssets";
   const pageDesc = activeTab === "Trade" 
-    ? "Powered by Uniswap V4, Coffhee's dark pools are automated portfolio managers that continuously monitors and rebalances assets without revealing the underlying strategy to the market."
+    ? "The Schrödinger Hook is an automated portfolio manager that continuously monitors and rebalances assets without revealing the underlying strategy to the market."
     : activeTab === "Markets" ? "Browse Coffhee's shielded asset markets backed by fixed-income products."
-    : "Acquire the eUSD stablecoin by locking approved collateral assets into the protocol.";
+    : "Lock supported assets and mint encrypted Coffhee assets for private trading across dark pools.";
 
   useEffect(() => {
     if (activeTab !== "Trade") return;
@@ -513,11 +590,11 @@ const handleMockRebalance = async () => {
           <div style={{ padding: "15px", borderRight: "1px solid #1a1a1a", background: "#070707", display: "flex", flexDirection: "column", gap: "15px" }}>
             <div style={{ borderBottom: "1px solid #1a1a1a", paddingBottom: "15px" }}>
               <div style={{ fontSize: "14px", fontWeight: "700", color: "#fff", marginBottom: "4px" }}>
-                Enter a Dark Pool
+                Enter a Private Pool
               </div>
 
               <div style={{ fontSize: "11px", color: "#777", marginBottom: "15px", lineHeight: 1.5 }}>
-                Deposit your Coffhee assets into a dark pool. The strategy monitors and rebalances in the background.
+                Deposit your Coffhee assets into a private pool. The strategy monitors and rebalances in the background.
               </div>
 
               <div style={{ marginBottom: "12px" }}>
@@ -772,18 +849,63 @@ const handleMockRebalance = async () => {
   };
 
   const renderLendSection = () => {
+    const structuredPools = [
+      {
+        id: "DDM-001",
+        name: "Espresso Perp Carry Pool",
+        type: "Dark Derivatives",
+        maturity: "Open",
+        apr: "14.80%",
+        price: "$1.00",
+        supply: "2,400",
+        collateral: "eUSD",
+        risk: "Medium",
+        description:
+          "A private derivatives pool using tokenized ERC-3475 perp positions with eUSD collateral reserves.",
+      },
+      {
+        id: "DCP-001",
+        name: "Mocha Credit Pool",
+        type: "Dark Credit",
+        maturity: "180 Days",
+        apr: "10.25%",
+        price: "$96.20",
+        supply: "1,150",
+        collateral: "eUSD",
+        risk: "Low-Medium",
+        description:
+          "A private credit pool designed for structured RWA-style debt exposure, reserves, and yield sleeves.",
+      },
+      {
+        id: "DDM-002",
+        name: "Black Roast Hedge Pool",
+        type: "Dark Derivatives",
+        maturity: "30 Days",
+        apr: "18.40%",
+        price: "$1.00",
+        supply: "760",
+        collateral: "eUSD",
+        risk: "High",
+        description:
+          "A higher-risk strategy pool that can hold multiple ERC-1155 position IDs for perp exposure, collateral, and hedging.",
+      },
+    ];
+
+    const activeStructuredPool = selectedBond || structuredPools[0];
+
     return (
       <div className="marketplace-shell">
         <div className="marketplace-toolbar">
           <div className="search-box">
             <span>⌕</span>
-            <input placeholder="Search eBond listings" />
+            <input placeholder="Search dark derivative or credit pools" />
           </div>
+
           <div className="marketplace-filters">
             <button className="filter-chip active">All</button>
-            <button className="filter-chip">Short Term</button>
-            <button className="filter-chip">Mid Term</button>
-            <button className="filter-chip">Long Term</button>
+            <button className="filter-chip">Derivatives</button>
+            <button className="filter-chip">Credit</button>
+            <button className="filter-chip">Lower Risk</button>
           </div>
         </div>
 
@@ -791,34 +913,46 @@ const handleMockRebalance = async () => {
           <table className="marketplace-table">
             <thead>
               <tr>
-                <th>Bond</th>
-                <th>Maturity</th>
-                <th>APR</th>
-                <th>Price</th>
-                <th>Supply</th>
+                <th>Pool</th>
+                <th>Type</th>
+                <th>Est. Yield</th>
+                <th>Entry</th>
+                <th>Capacity</th>
                 <th>Collateral</th>
                 <th />
               </tr>
             </thead>
+
             <tbody>
-              {ebondListings.map((bond) => (
-                <tr key={bond.id}>
+              {structuredPools.map((pool) => (
+                <tr key={pool.id}>
                   <td>
                     <div className="bond-name-cell">
-                      <div className="bond-badge">eB</div>
+                      <div className="bond-badge">
+                        {pool.type === "Dark Credit" ? "DC" : "DD"}
+                      </div>
                       <div>
-                        <strong>{bond.name}</strong>
-                        <span>{bond.id}</span>
+                        <strong>{pool.name}</strong>
+                        <span>{pool.id}</span>
                       </div>
                     </div>
                   </td>
-                  <td>{bond.maturity}</td>
-                  <td className="green-text">{bond.apr}</td>
-                  <td>{bond.price}</td>
-                  <td>{bond.supply}</td>
-                  <td>{bond.collateral}</td>
+
+                  <td>{pool.type}</td>
+                  <td className="green-text">{pool.apr}</td>
+                  <td>{pool.price}</td>
+                  <td>{pool.supply}</td>
+                  <td>{pool.collateral}</td>
+
                   <td>
-                    <button className="table-action-btn" onClick={() => handleViewBond(bond)}>
+                    <button
+                      className="table-action-btn"
+                      onClick={() => {
+                        setSelectedBond(pool);
+                        setBondMintAmount("1");
+                        setBondActionMessage("");
+                      }}
+                    >
                       View
                     </button>
                   </td>
@@ -828,39 +962,69 @@ const handleMockRebalance = async () => {
           </table>
         </div>
 
-        {selectedBond && (
+        {activeStructuredPool && (
           <div className="bond-info-card">
             <div className="bond-info-header">
               <div>
-                <span className="bond-info-eyebrow">Selected Asset</span>
-                <h3>{selectedBond.name}</h3>
-                <p>{selectedBond.description}</p>
+                <span className="bond-info-eyebrow">
+                  Selected Private Strategy
+                </span>
+                <h3>{activeStructuredPool.name}</h3>
+                <p>{activeStructuredPool.description}</p>
               </div>
-              <div className="bond-info-badge">Mint / Purchase</div>
+
+              <div className="bond-info-badge">
+                Enter Pool
+              </div>
             </div>
 
             <div className="bond-info-grid">
               <div className="bond-info-stat">
-                <span>Maturity</span>
-                <strong>{selectedBond.maturity}</strong>
+                <span>Pool Type</span>
+                <strong>{activeStructuredPool.type}</strong>
               </div>
+
               <div className="bond-info-stat">
-                <span>APR</span>
-                <strong>{selectedBond.apr}</strong>
+                <span>Est. Yield</span>
+                <strong>{activeStructuredPool.apr}</strong>
               </div>
-              <div className="bond-info-stat">
-                <span>Price</span>
-                <strong>{selectedBond.price}</strong>
-              </div>
+
               <div className="bond-info-stat">
                 <span>Collateral</span>
-                <strong>{selectedBond.collateral}</strong>
+                <strong>{activeStructuredPool.collateral}</strong>
+              </div>
+
+              <div className="bond-info-stat">
+                <span>Risk</span>
+                <strong>{activeStructuredPool.risk}</strong>
+              </div>
+            </div>
+
+            <div className="bond-info-grid" style={{ marginTop: "12px" }}>
+              <div className="bond-info-stat">
+                <span>Structure</span>
+                <strong>ERC-1155 Basket</strong>
+              </div>
+
+              <div className="bond-info-stat">
+                <span>Position Layer</span>
+                <strong>ERC-3475</strong>
+              </div>
+
+              <div className="bond-info-stat">
+                <span>Settlement</span>
+                <strong>eUSD</strong>
+              </div>
+
+              <div className="bond-info-stat">
+                <span>Privacy</span>
+                <strong>Enabled</strong>
               </div>
             </div>
 
             <div className="bond-action-row">
               <div className="bond-amount-box">
-                <label>Token Amount</label>
+                <label>Deposit Amount</label>
                 <input
                   type="number"
                   min="1"
@@ -869,11 +1033,31 @@ const handleMockRebalance = async () => {
                   className="bond-amount-input"
                 />
               </div>
-              <button className="primary-action bond-action-btn" onClick={handleMintBond}>
-                Purchase / Mint Token
+
+              <button
+                className="primary-action bond-action-btn"
+                onClick={() => {
+                  const qty = Number(bondMintAmount);
+
+                  if (!qty || qty <= 0) {
+                    setBondActionMessage("Enter a valid deposit amount.");
+                    return;
+                  }
+
+                  setBondActionMessage(
+                    `Demo action: entered ${activeStructuredPool.name} with ${qty} ${activeStructuredPool.collateral}.`
+                  );
+                }}
+              >
+                Enter Private Pool
               </button>
             </div>
-            {bondActionMessage && <p className="swap-helper-text success">{bondActionMessage}</p>}
+
+            {bondActionMessage && (
+              <p className="swap-helper-text success">
+                {bondActionMessage}
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -881,74 +1065,195 @@ const handleMockRebalance = async () => {
   };
 
   const renderEusdSection = () => {
-    return (
-      <div className="terminal-card">
-        <div className="terminal-header">
-          <span className="dot red" />
-          <span className="dot yellow" />
-          <span className="dot green" />
-          <div className="terminal-title">root@coffhee:~/eusd</div>
-        </div>
+  const handleSelectEAsset = (asset) => {
+    setSelectedEAsset(asset);
+    setEAssetSourceToken(asset.defaultCollateral);
+    setEAssetDepositAmount("");
+    setEAssetMintMessage("");
+  };
 
-        <div className="eusd-layout">
-          <div className="trade-card">
-            <div className="card-topline">
-              <span>Mint eUSD</span>
-              <button className="mini-link">Vault Settings</button>
-            </div>
+  const handleMintEAsset = async () => {
+    try {
+      setHookError("");
+      setEAssetMintMessage("");
 
-            <div className="collateral-switcher">
-              {["USD.e", "USDC", "USDT"].map((token) => (
-                <button
-                  key={token}
-                  className={`filter-chip ${eusdSourceToken === token ? "active" : ""}`}
-                  onClick={() => setEusdSourceToken(token)}
-                >
-                  {token}
-                </button>
-              ))}
-            </div>
+      if (!wallet?.address) {
+        throw new Error("Connect your wallet before minting an eAsset.");
+      }
 
-            <div className="token-panel">
-              <div className="token-panel-header">
-                <span>Collateral deposit</span>
-                <span>Wallet: 12,000.00</span>
-              </div>
-              <div className="token-row">
-                <input
-                  type="number"
-                  placeholder="0.0"
-                  value={eusdDepositAmount}
-                  onChange={(e) => setEusdDepositAmount(e.target.value)}
-                  className="amount-input"
-                />
-                <button className="token-select">{eusdSourceToken}</button>
-              </div>
-            </div>
+      if (!eAssetDepositAmount || Number(eAssetDepositAmount) <= 0) {
+        throw new Error("Enter a valid deposit amount.");
+      }
 
-            <div className="limit-config-grid">
-              <div className="config-card">
-                <label>Lock Period</label>
-                <select value={eusdLockPeriod} onChange={(e) => setEusdLockPeriod(e.target.value)} className="config-input">
-                  <option>7 Days</option>
-                  <option>30 Days</option>
-                  <option>90 Days</option>
-                  <option>180 Days</option>
-                </select>
-              </div>
+      const res = await fetch(`${API_BASE}${selectedEAsset.backendEndpoint}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          owner: wallet.address,
+          mintAsset: selectedEAsset.symbol,
+          route: selectedEAsset.route,
+          sourceChain: selectedEAsset.sourceChain,
+          collateralToken: eAssetSourceToken,
+          amount: eAssetDepositAmount,
+          lockPeriod: eAssetLockPeriod
+        })
+      });
 
-              <div className="config-card">
-                <label>Estimated eUSD</label>
-                <input type="text" value={eusdDepositAmount ? eusdDepositAmount : "0.0"} readOnly className="config-input" />
-              </div>
-            </div>
+      const data = await res.json();
 
-            <button className="primary-action">Lock & Mint eUSD</button>
+      if (!res.ok) {
+        throw new Error(data.error || "Mint route failed.");
+      }
+
+      setEAssetMintMessage(
+        data.message ||
+          `Mint request submitted: ${eAssetDepositAmount} ${eAssetSourceToken} → ${selectedEAsset.symbol}.`
+      );
+    } catch (err) {
+      setHookError(err.message);
+    }
+  };
+
+  return (
+    <div className="terminal-card">
+      <div className="terminal-header">
+        <span className="dot red" />
+        <span className="dot yellow" />
+        <span className="dot green" />
+        <div className="terminal-title">root@coffhee:~/eassets</div>
+      </div>
+
+      <div className="eusd-layout">
+        <div className="trade-card">
+          <div className="card-topline">
+            <span>Mint eAssets</span>
+            <button className="mini-link">Route Settings</button>
           </div>
+
+          <div className="collateral-switcher">
+            {eAssetRoutes.map((asset) => (
+              <button
+                key={asset.symbol}
+                className={`filter-chip ${selectedEAsset.symbol === asset.symbol ? "active" : ""}`}
+                onClick={() => handleSelectEAsset(asset)}
+              >
+                {asset.symbol}
+              </button>
+            ))}
+          </div>
+
+          <div className="token-panel">
+            <div className="token-panel-header">
+              <span>{selectedEAsset.name}</span>
+              <span>{selectedEAsset.sourceChain}</span>
+            </div>
+
+            <div style={{ padding: "12px 0", color: "#888", fontSize: "12px" }}>
+              Lock supported collateral and mint {selectedEAsset.symbol} for use inside Coffhee private pools.
+            </div>
+          </div>
+
+          <div className="token-panel">
+            <div className="token-panel-header">
+              <span>Collateral deposit</span>
+              <span>Route: {selectedEAsset.route}</span>
+            </div>
+
+            <div className="token-row">
+              <input
+                type="number"
+                placeholder="0.0"
+                value={eAssetDepositAmount}
+                onChange={(e) => setEAssetDepositAmount(e.target.value)}
+                className="amount-input"
+              />
+
+              <select
+                value={eAssetSourceToken}
+                onChange={(e) => setEAssetSourceToken(e.target.value)}
+                className="token-select"
+              >
+                {selectedEAsset.acceptedCollateral.map((token) => (
+                  <option key={token}>{token}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="limit-config-grid">
+            <div className="config-card">
+              <label>Lock Period</label>
+              <select
+                value={eAssetLockPeriod}
+                onChange={(e) => setEAssetLockPeriod(e.target.value)}
+                className="config-input"
+              >
+                <option>7 Days</option>
+                <option>30 Days</option>
+                <option>90 Days</option>
+                <option>180 Days</option>
+              </select>
+            </div>
+
+            <div className="config-card">
+              <label>You Receive</label>
+              <input
+                type="text"
+                value={
+                  eAssetDepositAmount
+                    ? `${eAssetDepositAmount} ${selectedEAsset.symbol}`
+                    : `0.0 ${selectedEAsset.symbol}`
+                }
+                readOnly
+                className="config-input"
+              />
+            </div>
+          </div>
+
+          <div className="bond-info-grid" style={{ marginTop: "14px", marginBottom: "14px" }}>
+            <div className="bond-info-stat">
+              <span>Mint Asset</span>
+              <strong>{selectedEAsset.symbol}</strong>
+            </div>
+
+            <div className="bond-info-stat">
+              <span>Collateral</span>
+              <strong>{eAssetSourceToken}</strong>
+            </div>
+
+            <div className="bond-info-stat">
+              <span>Source</span>
+              <strong>{selectedEAsset.sourceChain}</strong>
+            </div>
+
+            <div className="bond-info-stat">
+              <span>Privacy</span>
+              <strong>Enabled</strong>
+            </div>
+          </div>
+
+          <button className="primary-action" onClick={handleMintEAsset}>
+            Lock & Mint {selectedEAsset.symbol}
+          </button>
+
+          {eAssetMintMessage && (
+            <p className="swap-helper-text success">
+              {eAssetMintMessage}
+            </p>
+          )}
+
+          {hookError && (
+            <p className="swap-helper-text" style={{ color: "#ef4444" }}>
+              {hookError}
+            </p>
+          )}
         </div>
       </div>
-    );
-  };
+    </div>
+  );
+};
 
   return (
     <div className="app-shell">
@@ -986,7 +1291,7 @@ const handleMockRebalance = async () => {
 
           {activeTab === "Trade" && renderSchrodingerHookSection()}
           {activeTab === "Markets" && renderLendSection()}
-          {activeTab === "eUSD" && renderEusdSection()}
+          {activeTab === "eAssets" && renderEusdSection()}
         </section>
       </main>
     </div>
