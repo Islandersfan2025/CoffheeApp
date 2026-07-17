@@ -1,350 +1,232 @@
-/* global BigInt */
-import { ethers } from "ethers";
+import {
+  BrowserProvider,
+  Contract,
+  ZeroAddress,
+} from "ethers";
 
-export const SWAP_CONFIG = {
-  arbSepolia: {
-    chainId: 421614,
-    name: "Arbitrum Sepolia",
-    swapAddress: "0xe109c785dD5a143BA65beAffa4Db6c31f40395A8",
-    rpcUrl: process.env.REACT_APP_ARB_SEPOLIA_RPC_URL || "",
-    tokenAAddress: process.env.REACT_APP_SWAP_TOKEN_A || "",
-    tokenBAddress: process.env.REACT_APP_SWAP_TOKEN_B || "",
-  },
-};
+import {
+  createReadProvider,
+  NETWORKS,
+} from "./networks";
 
-export const SWAP_ABI = [
-  "function tokenA() view returns (address)",
-  "function tokenB() view returns (address)",
-  "function rateAToBNumerator() view returns (uint64)",
-  "function rateAToBDenominator() view returns (uint64)",
-  "function rateBToANumerator() view returns (uint64)",
-  "function rateBToADenominator() view returns (uint64)",
-  "function swapAForB((bytes32,uint256,uint8,bytes) encryptedAmountIn) external",
-  "function swapBForA((bytes32,uint256,uint8,bytes) encryptedAmountIn) external",
-  "event SwapAForB(address indexed sender)",
-  "event SwapBForA(address indexed sender)",
-  "event RatesUpdated(uint64 aToBNumerator, uint64 aToBDenominator, uint64 bToANumerator, uint64 bToADenominator)",
-];
-
-export const CONFIDENTIAL_TOKEN_ABI = [
-  "function name() view returns (string)",
-  "function symbol() view returns (string)",
-  "function decimals() view returns (uint8)",
-  "function setOperator(address operator, uint48 until) external",
-  "function isOperator(address holder, address operator) view returns (bool)",
-];
-
-function getConfig(networkKey = "arbSepolia") {
-  const config = SWAP_CONFIG[networkKey];
-  if (!config) {
-    throw new Error(`Unknown swap network: ${networkKey}`);
-  }
-  return config;
-}
-
-export async function getBrowserProvider() {
-  if (!window.ethereum) {
-    throw new Error("No wallet detected. Please install MetaMask or another EVM wallet.");
-  }
-
-  return new ethers.BrowserProvider(window.ethereum);
-}
-
-/**
- * Read-only provider for contract reads.
- * Uses a fixed RPC so reads do not accidentally follow the wallet's current network.
+/*
+ * Only the functions needed by App.js.
+ * No write calls are made here.
+ * Backend performs pool actions.
  */
-export async function getReadProvider(networkKey = "arbSepolia") {
-  const config = getConfig(networkKey);
 
-  if (!config.rpcUrl) {
-    throw new Error(
-      "Missing REACT_APP_ARB_SEPOLIA_RPC_URL. Add it to your .env file and restart the app."
-    );
-  }
+const ERC20_ABI = [
+  "function symbol() view returns (string)",
 
-  return new ethers.JsonRpcProvider(config.rpcUrl);
+  "function decimals() view returns (uint8)",
+
+  "function balanceOf(address) view returns (uint256)",
+];
+
+export async function getReadProvider(
+  network = NETWORKS.arbitrumSepolia
+) {
+  return createReadProvider(network);
 }
 
-export async function requestSwapWallet(networkKey = "arbSepolia") {
-  const config = getConfig(networkKey);
-  const provider = await getBrowserProvider();
-
-  await provider.send("eth_requestAccounts", []);
-  const signer = await provider.getSigner();
-  const address = await signer.getAddress();
-  const network = await provider.getNetwork();
-  const chainId = Number(network.chainId);
-
-  if (chainId !== config.chainId) {
+export async function requestSwapWallet(
+  network = NETWORKS.arbitrumSepolia
+) {
+  if (!window.ethereum) {
     throw new Error(
-      `Wrong wallet network. Please switch to ${config.name} (${config.chainId}). Current chainId: ${chainId}`
+      "MetaMask is not installed."
     );
   }
+
+  const provider =
+    new BrowserProvider(window.ethereum);
+
+  await provider.send(
+    "eth_requestAccounts",
+    []
+  );
+
+  try {
+    await window.ethereum.request({
+      method: "wallet_switchEthereumChain",
+
+      params: [
+        {
+          chainId:
+            network.chainIdHex,
+        },
+      ],
+    });
+  } catch (err) {
+    /*
+     * Ignore chain add errors.
+     * Assume chain already exists.
+     */
+
+    if (
+      err.code !== 4902 &&
+      err.code !== -32603
+    ) {
+      throw err;
+    }
+  }
+
+  const signer =
+    await provider.getSigner();
+
+  const address =
+    await signer.getAddress();
+
+  const currentNetwork =
+    await provider.getNetwork();
 
   return {
     provider,
+
     signer,
+
     address,
-    chainId,
+
+    chainId: Number(
+      currentNetwork.chainId
+    ),
+
+    network,
   };
 }
 
-export function getSwapContract(providerOrSigner, networkKey = "arbSepolia") {
-  const config = getConfig(networkKey);
+export async function fetchSwapState(
+  provider,
+  walletAddress,
+  hookAddress
+) {
+  const state = {
+    connected:
+      walletAddress != null,
 
-  if (!ethers.isAddress(config.swapAddress)) {
-    throw new Error(`Invalid swap contract address: ${config.swapAddress}`);
-  }
+    wallet:
+      walletAddress ||
+      ZeroAddress,
 
-  return new ethers.Contract(config.swapAddress, SWAP_ABI, providerOrSigner);
-}
+    hookAddress,
 
-export function getConfidentialTokenContract(address, providerOrSigner) {
-  if (!ethers.isAddress(address)) {
-    throw new Error(`Invalid token address: ${address}`);
-  }
-
-  return new ethers.Contract(address, CONFIDENTIAL_TOKEN_ABI, providerOrSigner);
-}
-
-export function formatRate(numerator, denominator) {
-  if (!denominator || denominator === 0n) return "—";
-  return Number(numerator) / Number(denominator);
-}
-
-export function estimateSwapOutputRaw(amountIn, numerator, denominator) {
-  const inAmount = BigInt(amountIn || 0);
-  const num = BigInt(numerator || 0);
-  const den = BigInt(denominator || 1);
-  return (inAmount * num) / den;
-}
-
-export async function fetchSwapState(provider, walletAddress = null, networkKey = "arbSepolia") {
-  const config = getConfig(networkKey);
-  const network = await provider.getNetwork();
-  const chainId = Number(network.chainId);
-
-  console.log("READ PROVIDER CHAIN:", chainId);
-  console.log("SWAP ADDRESS:", config.swapAddress);
-
-  if (chainId !== config.chainId) {
-    throw new Error(
-      `Swap reads must use ${config.name} (${config.chainId}). Current provider chainId: ${chainId}`
-    );
-  }
-
-  const code = await provider.getCode(config.swapAddress);
-  console.log("SWAP CONTRACT CODE:", code);
-
-  if (!code || code === "0x") {
-    throw new Error(
-      `No contract found at ${config.swapAddress} on ${config.name}.`
-    );
-  }
-
-  const swap = getSwapContract(provider, networkKey);
-
-  let tokenAAddressFromSwap;
-  let tokenBAddressFromSwap;
-  let rateAToBNumerator;
-  let rateAToBDenominator;
-  let rateBToANumerator;
-  let rateBToADenominator;
-
-  try {
-    [
-      tokenAAddressFromSwap,
-      tokenBAddressFromSwap,
-      rateAToBNumerator,
-      rateAToBDenominator,
-      rateBToANumerator,
-      rateBToADenominator,
-    ] = await Promise.all([
-      swap.tokenA(),
-      swap.tokenB(),
-      swap.rateAToBNumerator(),
-      swap.rateAToBDenominator(),
-      swap.rateBToANumerator(),
-      swap.rateBToADenominator(),
-    ]);
-  } catch (err) {
-    console.error("Swap contract read failed:", err);
-    throw new Error(
-      "Contract exists, but tokenA/tokenB/rate reads failed. Check deployment, ABI, and network."
-    );
-  }
-
-  const tokenAAddress =
-    ethers.isAddress(tokenAAddressFromSwap) && tokenAAddressFromSwap !== ethers.ZeroAddress
-      ? tokenAAddressFromSwap
-      : config.tokenAAddress;
-
-  const tokenBAddress =
-    ethers.isAddress(tokenBAddressFromSwap) && tokenBAddressFromSwap !== ethers.ZeroAddress
-      ? tokenBAddressFromSwap
-      : config.tokenBAddress;
-
-  if (!ethers.isAddress(tokenAAddress) || !ethers.isAddress(tokenBAddress)) {
-    throw new Error(
-      "Token A / Token B addresses are invalid or missing. Redeploy with real token addresses or set REACT_APP_SWAP_TOKEN_A and REACT_APP_SWAP_TOKEN_B."
-    );
-  }
-
-  const tokenA = getConfidentialTokenContract(tokenAAddress, provider);
-  const tokenB = getConfidentialTokenContract(tokenBAddress, provider);
-
-  const [tokenAName, tokenASymbol, tokenADecimals, tokenBName, tokenBSymbol, tokenBDecimals] =
-    await Promise.all([
-      safeReadString(() => tokenA.name(), "Token A"),
-      safeReadString(() => tokenA.symbol(), "TKNA"),
-      safeReadNumber(() => tokenA.decimals(), 18),
-      safeReadString(() => tokenB.name(), "Token B"),
-      safeReadString(() => tokenB.symbol(), "TKNB"),
-      safeReadNumber(() => tokenB.decimals(), 18),
-    ]);
-
-  let tokenAApproved = false;
-  let tokenBApproved = false;
-
-  if (walletAddress && ethers.isAddress(walletAddress)) {
-    [tokenAApproved, tokenBApproved] = await Promise.all([
-      safeReadBool(() => tokenA.isOperator(walletAddress, config.swapAddress), false),
-      safeReadBool(() => tokenB.isOperator(walletAddress, config.swapAddress), false),
-    ]);
-  }
-
-  return {
-    swapAddress: config.swapAddress,
-    tokenA: {
-      address: tokenAAddress,
-      name: tokenAName,
-      symbol: tokenASymbol,
-      decimals: tokenADecimals,
-      approved: tokenAApproved,
-    },
-    tokenB: {
-      address: tokenBAddress,
-      name: tokenBName,
-      symbol: tokenBSymbol,
-      decimals: tokenBDecimals,
-      approved: tokenBApproved,
-    },
-    rates: {
-      aToB: {
-        numerator: BigInt(rateAToBNumerator),
-        denominator: BigInt(rateAToBDenominator),
-        display: formatRate(BigInt(rateAToBNumerator), BigInt(rateAToBDenominator)),
-      },
-      bToA: {
-        numerator: BigInt(rateBToANumerator),
-        denominator: BigInt(rateBToADenominator),
-        display: formatRate(BigInt(rateBToANumerator), BigInt(rateBToADenominator)),
-      },
-    },
+    balances: [],
   };
-}
 
-export async function approveSwapOperator({
-  signer,
-  tokenAddress,
-  networkKey = "arbSepolia",
-  validForSeconds = 60 * 60 * 24 * 365,
-}) {
-  const config = getConfig(networkKey);
-
-  if (!ethers.isAddress(tokenAddress)) {
-    throw new Error(`Invalid token address: ${tokenAddress}`);
+  if (!walletAddress) {
+    return state;
   }
 
-  const token = getConfidentialTokenContract(tokenAddress, signer);
-  const now = Math.floor(Date.now() / 1000);
-  const until = now + validForSeconds;
+  /*
+   * Example demo tokens.
+   * Backend remains source of truth.
+   */
 
-  const tx = await token.setOperator(config.swapAddress, until);
-  return tx.wait();
-}
+  const demoTokens = [
+    {
+      symbol: "USDC",
 
-/**
- * Temporary encryption hook.
- * Replace this with your real CoFHE browser SDK wiring.
- */
-export async function encryptUint64ForSwap(amount) {
-  const normalized = BigInt(amount);
+      address:
+        "0x0000000000000000000000000000000000000001",
+    },
 
-  if (window.coffheeEncryptUint64) {
-    return await window.coffheeEncryptUint64(normalized);
+    {
+      symbol: "WETH",
+
+      address:
+        "0x0000000000000000000000000000000000000002",
+    },
+
+    {
+      symbol: "LINK",
+
+      address:
+        "0x0000000000000000000000000000000000000003",
+    },
+  ];
+
+  for (const token of demoTokens) {
+    try {
+      const contract =
+        new Contract(
+          token.address,
+          ERC20_ABI,
+          provider
+        );
+
+      const decimals =
+        await contract.decimals();
+
+      const balance =
+        await contract.balanceOf(
+          walletAddress
+        );
+
+      state.balances.push({
+        symbol: token.symbol,
+
+        decimals,
+
+        balance:
+          balance.toString(),
+      });
+    } catch {
+      /*
+       * Ignore unavailable demo tokens.
+       */
+    }
   }
 
-  if (window.cofhe && typeof window.cofhe.encryptUint64 === "function") {
-    return await window.cofhe.encryptUint64(normalized);
+  return state;
+}
+
+export async function getWalletBalance(
+  provider,
+  address
+) {
+  const balance =
+    await provider.getBalance(
+      address
+    );
+
+  return balance;
+}
+
+export async function currentChain() {
+  if (!window.ethereum) {
+    return null;
   }
 
-  if (window.cofheSdk && typeof window.cofheSdk.encryptUint64 === "function") {
-    return await window.cofheSdk.encryptUint64(normalized);
+  const provider =
+    new BrowserProvider(window.ethereum);
+
+  const network =
+    await provider.getNetwork();
+
+  return Number(network.chainId);
+}
+
+export async function walletConnected() {
+  if (!window.ethereum) {
+    return false;
   }
 
-  throw new Error(
-    "No browser encryption helper found. Wire your installed @cofhe/sdk encrypt method into encryptUint64ForSwap()."
-  );
+  const accounts =
+    await window.ethereum.request({
+      method: "eth_accounts",
+    });
+
+  return accounts.length > 0;
 }
 
-export async function swapTokenAForB({
-  signer,
-  amountRaw,
-  networkKey = "arbSepolia",
-}) {
-  const swap = getSwapContract(signer, networkKey);
-  const encryptedAmountIn = await encryptUint64ForSwap(amountRaw);
+export async function disconnectWallet() {
+  /*
+   * MetaMask does not expose
+   * a disconnect API.
+   *
+   * App.js simply clears
+   * wallet state.
+   */
 
-  const tx = await swap.swapAForB(encryptedAmountIn);
-  return tx.wait();
-}
-
-export async function swapTokenBForA({
-  signer,
-  amountRaw,
-  networkKey = "arbSepolia",
-}) {
-  const swap = getSwapContract(signer, networkKey);
-  const encryptedAmountIn = await encryptUint64ForSwap(amountRaw);
-
-  const tx = await swap.swapBForA(encryptedAmountIn);
-  return tx.wait();
-}
-
-export function parseUnitsSafe(value, decimals) {
-  if (!value || Number(value) <= 0) return 0n;
-  return ethers.parseUnits(String(value), decimals);
-}
-
-export function formatUnitsSafe(value, decimals, precision = 6) {
-  const formatted = ethers.formatUnits(value, decimals);
-  const [whole, fraction = ""] = formatted.split(".");
-  if (!fraction) return formatted;
-  return `${whole}.${fraction.slice(0, precision)}`;
-}
-
-async function safeReadString(fn, fallback) {
-  try {
-    return await fn();
-  } catch {
-    return fallback;
-  }
-}
-
-async function safeReadNumber(fn, fallback) {
-  try {
-    return Number(await fn());
-  } catch {
-    return fallback;
-  }
-}
-
-async function safeReadBool(fn, fallback) {
-  try {
-    return Boolean(await fn());
-  } catch {
-    return fallback;
-  }
+  return true;
 }
