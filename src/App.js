@@ -455,7 +455,7 @@ function App() {
 
   const pageDesc =
     activeTab === "Trade"
-      ? "The Schrödinger Hook is an automated portfolio manager that continuously monitors and rebalances assets without revealing the underlying strategy to the market."
+      ? "Dark pools for confidential liquidity and rebalancing without revealing your strategy to the market."
       : activeTab === "Markets"
         ? "Browse Coffhee's shielded asset markets backed by structured derivative and credit positions."
         : "Lock supported assets and mint encrypted Coffhee assets for private trading across dark pools.";
